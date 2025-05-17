@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analizador Léxico - Editor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            /* Tema oscuro (VS Code) */
+            --bg-primary: #1e1e1e;
+            --bg-secondary: #252526;
+            --bg-editor: #1e1e1e;
+            --text-primary: #d4d4d4;
+            --text-secondary: #9cdcfe;
+            --text-comment: #6a9955;
+            --text-keyword: #569cd6;
+            --text-string: #ce9178;
+            --text-number: #b5cea8;
+            --border-color: #444;
+            --accent-color: #0e639c;
+            --line-numbers: #858585;
+            --tab-bg: #2d2d2d;
+            --tab-active: #1e1e1e;
+            --scrollbar-thumb: #424242;
+            --statusbar-bg: #007acc;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body, html {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .ide-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Barra de título y menú */
+        .title-bar {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 15px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            font-size: 12px;
+            user-select: none;
+        }
+
+        /* Pestañas de archivo */
+        .tabs {
+            display: flex;
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            height: 35px;
+        }
+
+        .tab {
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            background-color: var(--tab-bg);
+            height: 100%;
+            border-right: 1px solid var(--border-color);
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .tab.active {
+            background-color: var(--tab-active);
+            border-bottom: 1px solid var(--accent-color);
+            margin-bottom: -1px;
+        }
+
+        .tab-icon {
+            margin-right: 6px;
+            color: var(--text-secondary);
+        }
+
+        /* Barra de herramientas */
+        .toolbar {
+            background-color: var(--bg-secondary);
+            padding: 5px 15px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tool-button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            margin-right: 10px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+        }
+
+        .tool-button i {
+            margin-right: 5px;
+        }
+
+        .tool-button:hover {
+            background-color: #1177bb;
+        }
+
+        /* Área principal con editor y consola */
+        .main-area {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+
+        /* Editor de código */
+        .editor-area {
+            display: flex;
+            flex-grow: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .line-numbers {
+            background-color: var(--bg-secondary);
+            color: var(--line-numbers);
+            padding: 10px 0;
+            text-align: right;
+            font-size: 14px;
+            width: 50px;
+            user-select: none;
+            border-right: 1px solid var(--border-color);
+            overflow-y: hidden;
+        }
+
+        .line-numbers div {
+            padding: 0 10px;
+            height: 20px;
+            line-height: 20px;
+        }
+
+        .editor-content {
+            flex-grow: 1;
+            position: relative;
+        }
+
+        textarea.code-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 10px;
+            background-color: var(--bg-editor);
+            color: var(--text-primary);
+            border: none;
+            resize: none;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 20px;
+            tab-size: 4;
+            outline: none;
+            caret-color: #fff;
+        }
+
+        /* Barra divisoria arrastrable */
+        .resizer {
+            height: 5px;
+            background-color: var(--border-color);
+            cursor: ns-resize;
+            user-select: none;
+        }
+
+        /* Consola de salida */
+        .console-area {
+            background-color: #1a1a1a;
+            border-top: 1px solid var(--border-color);
+            overflow-y: auto;
+            height: 200px;
+        }
+
+        .console-header {
+            display: flex;
+            align-items: center;
+            padding: 5px 10px;
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 12px;
+        }
+
+        .console-header i {
+            margin-right: 5px;
+            color: var(--text-secondary);
+        }
+
+        .console-content {
+            padding: 10px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            line-height: 1.4;
+        }
+
+        /* Barra de estado */
+        .status-bar {
+            background-color: var(--statusbar-bg);
+            color: white;
+            padding: 5px 15px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+        }
+
+        .status-item i {
+            margin-right: 5px;
+        }
+
+        /* Mejora para scrollbars */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="ide-container">
+        <!-- Barra de título superior -->
+        <div class="title-bar">
+            Analizador Léxico - Identificadores y Números
+        </div>
+
+        <!-- Pestañas tipo editor de código -->
+        <div class="tabs">
+            <div class="tab active">
+                <i class="tab-icon fas fa-code"></i>
+                <span>input.txt</span>
+            </div>
+        </div>
+
+        <!-- Barra de herramientas con botones -->
+        <div class="toolbar">
+            <button type="button" class="tool-button" id="run-button">
+                <i class="fas fa-play"></i> Ejecutar
+            </button>
+        </div>
+
+        <!-- Área principal dividida entre editor y consola -->
+        <div class="main-area">
+            <!-- Área del editor de código -->
+            <div class="editor-area">
+                <div class="line-numbers" id="line-numbers">
+                    <div>1</div>
+                </div>
+                <div class="editor-content">
+                    <form id="code-form" method="post">
+                        <textarea id="code-input" name="input" class="code-input" placeholder="Ingresa tu texto para analizar (ej: up upchiapas 8909 upchiapas universidad)" autofocus spellcheck="false"></textarea>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Divisor redimensionable entre editor y consola -->
+            <div class="resizer" id="resizer"></div>
+
+            <!-- Área de consola para resultados -->
+            <div class="console-area">
+                <div class="console-header">
+                    <i class="fas fa-terminal"></i> Consola
+                </div>
+                <div class="console-content" id="console-output">
+                    > Analizador Léxico iniciado. Escribe texto y presiona Ejecutar.
+                </div>
+            </div>
+        </div>
+
+        <!-- Barra de estado inferior -->
+        <div class="status-bar">
+            <div class="status-item">
+                <i class="fas fa-info-circle"></i> Listo
+            </div>
+            <div class="status-item">
+                <i class="fas fa-code"></i> Analizador Léxico v1.0
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // Actualizar números de línea
+        const codeInput = document.getElementById('code-input');
+        const lineNumbers = document.getElementById('line-numbers');
+        const runButton = document.getElementById('run-button');
+        const consoleOutput = document.getElementById('console-output');
+        const codeForm = document.getElementById('code-form');
+        
+        // Generar números de línea
+        function updateLineNumbers() {
+            const lines = codeInput.value.split('\n');
+            const count = lines.length;
+            let html = '';
+            
+            for (let i = 1; i <= count; i++) {
+                html += `<div>${i}</div>`;
+            }
+            
+            lineNumbers.innerHTML = html;
+        }
+        
+        // Evento de input para actualizar números de línea
+        codeInput.addEventListener('input', updateLineNumbers);
+        
+        // Permitir tabulaciones en el textarea
+        codeInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                
+                // Insertar 4 espacios en lugar de tab
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                
+                this.value = this.value.substring(0, start) + '    ' + this.value.substring(end);
+                
+                // Mover el cursor a la posición correcta
+                this.selectionStart = this.selectionEnd = start + 4;
+                
+                // Actualizar números de línea
+                updateLineNumbers();
+            }
+        });
+        
+        // Botón de ejecutar
+        runButton.addEventListener('click', function() {
+            // Mostrar un pequeño efecto de "ejecutando" en la consola
+            consoleOutput.innerHTML = '> Analizando texto...\n';
+            
+            // Enviar el formulario
+            codeForm.submit();
+        });
+        
+        // Función para hacer que el divisor sea redimensionable
+        const resizer = document.getElementById('resizer');
+        const editorArea = document.querySelector('.editor-area');
+        const consoleArea = document.querySelector('.console-area');
+        
+        resizer.addEventListener('mousedown', initResize);
+        
+        function initResize(e) {
+            window.addEventListener('mousemove', resize);
+            window.addEventListener('mouseup', stopResize);
+        }
+        
+        function resize(e) {
+            const totalHeight = document.querySelector('.main-area').offsetHeight;
+            const newConsoleHeight = totalHeight - e.clientY + resizer.offsetHeight / 2;
+            
+            // Limitar el tamaño mínimo
+            if (newConsoleHeight < 50) return;
+            if (totalHeight - newConsoleHeight < 50) return;
+            
+            consoleArea.style.height = newConsoleHeight + 'px';
+        }
+        
+        function stopResize() {
+            window.removeEventListener('mousemove', resize);
+            window.removeEventListener('mouseup', stopResize);
+        }
+        
+        // Inicializar con al menos una línea
+        updateLineNumbers();
+    </script>
+</body>
+</html>
